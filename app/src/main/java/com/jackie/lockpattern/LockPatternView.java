@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Point;
+import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.util.TypedValue;
 import android.view.MotionEvent;
@@ -28,11 +29,11 @@ public class LockPatternView extends View {
     /**
      * 圆心数组
      */
-    private Point[][] mPointArray = new Point[3][3];
+    private PointView[][] mPointViewArray = new PointView[3][3];
     /**
      * 保存选中点的集合
      */
-    private List<Point> mPointList;
+    private List<PointView> mSelectedPointViewList;
 
 
     /**
@@ -41,9 +42,19 @@ public class LockPatternView extends View {
     private int mPatternWidth;
 
     /**
+     * 图案监听器
+     */
+    private OnPatternChangeListener mOnPatternChangeListener;
+
+    /**
      * 半径
      */
     private float mRadius;
+
+    /**
+     * 每个圆圈的下标
+     */
+    private int mIndex = 1;
 
     /**
      * 第一个点是否选中
@@ -92,7 +103,7 @@ public class LockPatternView extends View {
 
         mRadius = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 15, getResources().getDisplayMetrics());
 
-        mPointList = new ArrayList<>();
+        mSelectedPointViewList = new ArrayList<>();
     }
 
     @Override
@@ -110,27 +121,24 @@ public class LockPatternView extends View {
         drawCircle(canvas);
 
         //将选中的圆重新绘制一遍，保证选中的点和未选中的点有区别
-        for (Point point : mPointList) {
+        for (PointView pointView : mSelectedPointViewList) {
             mCirclePaint.setColor(SELECTED_COLOR);
-            canvas.drawCircle(point.x, point.y, mRadius, mCirclePaint);
+            canvas.drawCircle(pointView.x, pointView.y, mRadius, mCirclePaint);
             mCirclePaint.setColor(NORMAL_COLOR);  //每重新绘制一个,将画笔的颜色重置,保证不会影响其他圆的绘制
-
-            //将绘制的点按顺序设置转化成密码
-
         }
 
         //画线
-        if (mPointList.size() > 0) {
-            Point pointA = mPointList.get(0);  //第一个选中的点为A点
-            for (int i = 0; i < mPointList.size(); i++) {
-                Point pointB = mPointList.get(i);  //其他依次遍历出来的点为B点
-                drawLine(canvas, pointA, pointB);
-                pointA = pointB;
+        if (mSelectedPointViewList.size() > 0) {
+            Point pointViewA = mSelectedPointViewList.get(0);  //第一个选中的点为A点
+            for (int i = 0; i < mSelectedPointViewList.size(); i++) {
+                Point pointViewB = mSelectedPointViewList.get(i);  //其他依次遍历出来的点为B点
+                drawLine(canvas, pointViewA, pointViewB);
+                pointViewA = pointViewB;
             }
 
             //绘制轨迹
             if (mIsMovingWithoutCircle) {
-                drawLine(canvas, pointA, new Point((int)mCurrentX, (int)mCurrentY));
+                drawLine(canvas, pointViewA, new PointView((int)mCurrentX, (int)mCurrentY));
             }
         }
 
@@ -143,17 +151,22 @@ public class LockPatternView extends View {
      */
     private void drawCircle(Canvas canvas) {
         //初始化点的位置
-        for (int i = 0; i < mPointArray.length; i++) {
-            for (int j = 0; j < mPointArray.length; j++) {
+        for (int i = 0; i < mPointViewArray.length; i++) {
+            for (int j = 0; j < mPointViewArray.length; j++) {
                 //圆心的坐标
                 int cx = mPatternWidth / 4 * (j + 1);
                 int cy = mPatternWidth / 4 * (i + 1);
 
                 //将圆心放在一个点数组中
-                mPointArray[i][j] = new Point(cx, cy);
+                PointView pointView = new PointView(cx, cy);
+                pointView.setIndex(mIndex);
+                mPointViewArray[i][j] = pointView;
                 canvas.drawCircle(cx, cy, mRadius, mCirclePaint);
+                mIndex++;
             }
         }
+
+        mIndex = 1;
     }
 
     /**
@@ -170,37 +183,42 @@ public class LockPatternView extends View {
     public boolean onTouchEvent(MotionEvent event) {
         mCurrentX = event.getX();
         mCurrentY = event.getY();
-        Point point = null;
+        PointView selectedPointView = null;
 
         switch(event.getAction()) {
             case MotionEvent.ACTION_DOWN:
-                mPointList.clear();
+                //重新绘制
+                if (mOnPatternChangeListener != null) {
+                    mOnPatternChangeListener.onPatternStarted(true);
+                }
+
+                mSelectedPointViewList.clear();
                 mIsFinish = false;
 
-                point = checkSelectPoint();
+                selectedPointView = checkSelectPoint();
 
-                if (point != null) {
+                if (selectedPointView != null) {
                     //第一次按下的位置在圆内
                     mIsSelected = true;
                 }
                 break;
             case MotionEvent.ACTION_MOVE:
                 if (mIsSelected) {
-                    point = checkSelectPoint();
+                    selectedPointView = checkSelectPoint();
                 }
 
-                if (point == null) {
+                if (selectedPointView == null) {
                     mIsMovingWithoutCircle = true;
                 } else {
                 }
                 break;
             case MotionEvent.ACTION_UP:
                 if (mIsSelected) {
-                    point = checkSelectPoint();
+                    selectedPointView = checkSelectPoint();
                 }
 
                 //如果松手时的坐标不在圆内，那么从最后一个选中的点到当前坐标的一小段直线应该删除
-                if (point == null) {
+                if (selectedPointView == null) {
 
                 }
                 mIsFinish = true;
@@ -209,17 +227,33 @@ public class LockPatternView extends View {
         }
 
         //将选中的点收集起来
-        if (!mIsFinish && mIsSelected && point != null) {
-            if (!mPointList.contains(point)) {
-                mPointList.add(point);
+        if (!mIsFinish && mIsSelected && selectedPointView != null) {
+            if (!mSelectedPointViewList.contains(selectedPointView)) {
+                mSelectedPointViewList.add(selectedPointView);
             }
         }
 
         if (mIsFinish) {
-            if (mPointList.size() == 1) {
-                mPointList.clear();
-            } else if (mPointList.size() < 5 && mPointList.size() > 2) {
-                //错误的状态
+
+            if (mSelectedPointViewList.size() == 1) {
+                mSelectedPointViewList.clear();
+            } else if (mSelectedPointViewList.size() < 5 && mSelectedPointViewList.size() > 0) {
+                //绘制错误
+                if (mOnPatternChangeListener != null) {
+                    mOnPatternChangeListener.onPatternChange(null);
+                }
+            } else {
+                //绘制成功
+                String patternPassword = "";
+                if (mOnPatternChangeListener != null) {
+                    for (PointView pointView : mSelectedPointViewList) {
+                        patternPassword += pointView.getIndex();
+                    }
+
+                    if (!TextUtils.isEmpty(patternPassword)) {
+                        mOnPatternChangeListener.onPatternChange(patternPassword);
+                    }
+                }
             }
         }
 
@@ -231,12 +265,12 @@ public class LockPatternView extends View {
      * 判断当前按下的位置是否在圆心数组中
      * @return 返回选中的点
      */
-    private Point checkSelectPoint() {
-        for (int i = 0; i < mPointArray.length; i++) {
-            for (int j = 0; j < mPointArray.length; j++) {
-                Point point = mPointArray[i][j];
-                if (isWithinCircle(mCurrentX, mCurrentY, point.x, point.y, mRadius)) {
-                    return point;
+    private PointView checkSelectPoint() {
+        for (int i = 0; i < mPointViewArray.length; i++) {
+            for (int j = 0; j < mPointViewArray.length; j++) {
+                PointView pointView = mPointViewArray[i][j];
+                if (isWithinCircle(mCurrentX, mCurrentY, pointView.x, pointView.y, mRadius)) {
+                    return pointView;
                 }
             }
         }
@@ -260,5 +294,31 @@ public class LockPatternView extends View {
         }
 
         return false;
+    }
+
+    /**
+     * 设置图案监听器
+     */
+    public void setOnPatternChangeListener(OnPatternChangeListener onPatternChangeListener) {
+        if (onPatternChangeListener != null) {
+            this.mOnPatternChangeListener = onPatternChangeListener;
+        }
+    }
+
+    /**
+     * 图案监听器
+     */
+    public interface OnPatternChangeListener {
+        /**
+         * 图案改变
+         * @param patternPassword 图案密码
+         */
+        void onPatternChange(String patternPassword);
+
+        /**
+         * 图案是否重新绘制
+         * @param isStarted 重新绘制
+         */
+        void onPatternStarted(boolean isStarted);
     }
 }
