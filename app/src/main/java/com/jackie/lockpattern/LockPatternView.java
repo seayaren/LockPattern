@@ -63,7 +63,7 @@ public class LockPatternView extends View {
     /**
      * 是否绘制结束
      */
-    private boolean mIsFinish;
+    private boolean mIsFinished;
 
     /**
      * 正在滑动并且没有任何点选中
@@ -101,7 +101,7 @@ public class LockPatternView extends View {
         mLinePaint.setColor(SELECTED_COLOR);
         mLinePaint.setStyle(Paint.Style.STROKE);
 
-        mRadius = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 15, getResources().getDisplayMetrics());
+        mRadius = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 20, getResources().getDisplayMetrics());
 
         mSelectedPointViewList = new ArrayList<>();
     }
@@ -120,14 +120,14 @@ public class LockPatternView extends View {
         //画圆
         drawCircle(canvas);
 
-        //将选中的圆重新绘制一遍，保证选中的点和未选中的点有区别
+        //将选中的圆重新绘制一遍，将选中的点和未选中的点区别开来
         for (PointView pointView : mSelectedPointViewList) {
             mCirclePaint.setColor(SELECTED_COLOR);
             canvas.drawCircle(pointView.x, pointView.y, mRadius, mCirclePaint);
             mCirclePaint.setColor(NORMAL_COLOR);  //每重新绘制一个,将画笔的颜色重置,保证不会影响其他圆的绘制
         }
 
-        //画线
+        //点与点画线
         if (mSelectedPointViewList.size() > 0) {
             Point pointViewA = mSelectedPointViewList.get(0);  //第一个选中的点为A点
             for (int i = 0; i < mSelectedPointViewList.size(); i++) {
@@ -136,8 +136,8 @@ public class LockPatternView extends View {
                 pointViewA = pointViewB;
             }
 
-            //绘制轨迹
-            if (mIsMovingWithoutCircle) {
+            //点与鼠标当前位置绘制轨迹
+            if (mIsMovingWithoutCircle & !mIsFinished) {
                 drawLine(canvas, pointViewA, new PointView((int)mCurrentX, (int)mCurrentY));
             }
         }
@@ -193,12 +193,12 @@ public class LockPatternView extends View {
                 }
 
                 mSelectedPointViewList.clear();
-                mIsFinish = false;
+                mIsFinished = false;
 
                 selectedPointView = checkSelectPoint();
 
                 if (selectedPointView != null) {
-                    //第一次按下的位置在圆内
+                    //第一次按下的位置在圆内，被选中
                     mIsSelected = true;
                 }
                 break;
@@ -209,32 +209,22 @@ public class LockPatternView extends View {
 
                 if (selectedPointView == null) {
                     mIsMovingWithoutCircle = true;
-                } else {
                 }
                 break;
             case MotionEvent.ACTION_UP:
-                if (mIsSelected) {
-                    selectedPointView = checkSelectPoint();
-                }
-
-                //如果松手时的坐标不在圆内，那么从最后一个选中的点到当前坐标的一小段直线应该删除
-                if (selectedPointView == null) {
-
-                }
-                mIsFinish = true;
+                mIsFinished = true;
                 mIsSelected = false;
                 break;
         }
 
         //将选中的点收集起来
-        if (!mIsFinish && mIsSelected && selectedPointView != null) {
+        if (!mIsFinished && mIsSelected && selectedPointView != null) {
             if (!mSelectedPointViewList.contains(selectedPointView)) {
                 mSelectedPointViewList.add(selectedPointView);
             }
         }
 
-        if (mIsFinish) {
-
+        if (mIsFinished) {
             if (mSelectedPointViewList.size() == 1) {
                 mSelectedPointViewList.clear();
             } else if (mSelectedPointViewList.size() < 5 && mSelectedPointViewList.size() > 0) {
